@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Self-Healing Microservice Mesh</title>
+  <style>
+    :root {
+      --purple: #6b54e8;
+      --pink: #9747d8;
+      --text: #2c1c50;
+      --muted: #9286a6;
+      --border: #eee7f8;
+      --green: #20b985;
+      --red: #ef476f;
+      --yellow: #f3b632;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      color: var(--text);
+      background: #fff;
+      font: 15px/1.5 Inter, "Segoe UI", system-ui, sans-serif;
+    }
+    button { font: inherit; cursor: pointer; }
+    button:disabled { opacity: .5; cursor: not-allowed; }
+
+    .app { max-width: 1480px; margin: auto; padding: 24px 30px 30px; }
+    .topbar {
+      display: flex; align-items: center; justify-content: space-between; gap: 20px;
+      position: relative; isolation: isolate; overflow: hidden;
+      margin-bottom: 22px; padding: 28px 30px; border-radius: 20px;
+      color: white; background: linear-gradient(115deg, #5a55e9, #7649e6 52%, #9945d8);
+      box-shadow: 0 18px 40px #6545cf2b;
+    }
+    .topbar::after {
+      content: ""; position: absolute; z-index: -1; width: 390px; height: 390px;
+      right: 7%; top: -230px; border: 1px solid #ffffff26; border-radius: 50%;
+      box-shadow: 0 0 0 34px #ffffff0b, 0 0 0 70px #ffffff08;
+    }
+    .brand { display: flex; align-items: center; gap: 15px; }
+    .logo {
+      display: grid; place-items: center; width: 44px; height: 44px;
+      border: 1px solid #ffffff44; border-radius: 14px; color: white;
+      background: #ffffff20; font-size: 23px; font-weight: 900;
+    }
+    h1 { margin: 0; color: white; font-size: clamp(24px, 3vw, 35px); line-height: 1.15; letter-spacing: -1px; }
+    .subtitle { margin-top: 6px; color: #eee9ff; }
+    .live {
+      display: flex; align-items: center; gap: 8px; white-space: nowrap;
+      padding: 8px 12px; border: 1px solid #ffffff50; border-radius: 999px;
+      color: white; background: #ffffff19; font-size: 12px;
+    }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: #73f5c6; box-shadow: 0 0 12px #73f5c6; }
+
+    .stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 15px; margin-bottom: 16px; }
+    .stat, .panel {
+      min-width: 0; border: 1px solid var(--border); border-radius: 16px;
+      background: white; box-shadow: 0 7px 24px #43266c0a;
+    }
+    .stat { padding: 17px 19px; }
+    .label { color: #827696; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; }
+    .value { margin-top: 5px; color: #3f267f; font-size: 30px; font-weight: 750; }
+    .hint { color: #958aa7; font-size: 12px; }
+    .layout { display: grid; grid-template-columns: minmax(0, 1.8fr) minmax(300px, .9fr); gap: 16px; }
+    .panel { padding: 20px; }
+    .panel-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 16px; }
+    h2 { margin: 0; color: var(--text); font-size: 17px; }
+    .kicker { margin-top: 4px; color: var(--muted); font-size: 12px; }
+    .legend { display: flex; flex-wrap: wrap; gap: 12px; color: #7d718f; font-size: 12px; }
+    .legend span { display: flex; align-items: center; gap: 6px; }
+    .swatch { width: 8px; height: 8px; border-radius: 50%; }
+
+    .mesh-wrap {
+      position: relative; overflow: hidden; width: 100%; min-height: 430px;
+      border: 1px solid #e7def9; border-radius: 14px;
+      background: linear-gradient(145deg, #fbf9ff, #f3efff);
+    }
+    .mesh-wrap::before {
+      content: ""; position: absolute; inset: 0; pointer-events: none;
+      background-image: linear-gradient(#8266c30d 1px, transparent 1px),
+        linear-gradient(90deg, #8266c30d 1px, transparent 1px);
+      background-size: 28px 28px;
+    }
+    #mesh { position: relative; z-index: 1; display: block; width: 100%; height: 430px; }
+    .edge { fill: none; stroke: #b9acd7; stroke-width: 2.2; }
+    .edge.bad { stroke: var(--red); stroke-width: 3; filter: drop-shadow(0 0 4px #ef476f33); }
+    .node { cursor: pointer; outline: none; }
+    .node rect { fill: white; stroke: var(--green); stroke-width: 2; filter: drop-shadow(0 5px 7px #42236b12); }
+    .node text { fill: #35255a; font-size: 12px; font-weight: 750; text-anchor: middle; }
+    .node .sub { fill: #8d82a3; font-size: 10px; font-weight: 550; }
+    .node .led { fill: var(--green); }
+    .node.failing rect { fill: #fff2f5; stroke: var(--red); stroke-width: 3; }
+    .node.failing .led { fill: var(--red); }
+    .node.fixing rect { fill: #fff9e9; stroke: var(--yellow); stroke-width: 3; }
+    .node.fixing .led { fill: var(--yellow); }
+    .node.root rect { animation: pulse 1.1s ease-in-out infinite; }
+    .node:focus rect { stroke: #6b54e8; stroke-width: 3; }
+    .mesh-caption { position: absolute; z-index: 2; bottom: 12px; left: 14px; color: #8a7aa6; font-size: 11px; }
+    .controls { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+    button {
+      padding: 10px 14px; border: 1px solid #e6dcf8; border-radius: 10px;
+      color: #5a428d; background: #f8f5ff; font-weight: 650; box-shadow: 0 2px 4px #3c1d6808;
+    }
+    button:hover { background: #f0e8ff; border-color: #d5c4fa; }
+    button.primary { color: white; border-color: #7651e2; background: linear-gradient(110deg, #6a54e8, #9345d8); }
+    button.primary:hover { background: linear-gradient(110deg, #5944d7, #8236ca); }
+    button.danger { color: #c82e52; border-color: #ffd0da; background: #fff0f3; }
+    button.danger:hover { background: #ffe3e9; }
+    .controls button { font-size: 12px; }
+    .small-note { margin-top: 10px; color: #9387a6; font-size: 11px; }
+
+    .right-stack { display: flex; flex-direction: column; gap: 16px; }
+    .status-list { display: flex; flex-direction: column; gap: 9px; }
+    .service-row {
+      display: flex; align-items: center; gap: 10px; padding: 11px;
+      border: 1px solid #f0eafa; border-radius: 12px; background: #fcfbff;
+    }
+    .service-icon { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 10px; color: #7252cb; background: #f0eaff; font-weight: 800; }
+    .service-name { color: #37245f; font-size: 13px; font-weight: 650; }
+    .service-desc { color: #9387a6; font-size: 11px; }
+    .pill { margin-left: auto; padding: 5px 8px; border-radius: 999px; font-size: 10px; font-weight: 800; letter-spacing: .4px; }
+    .pill.healthy { color: #12845f; background: #e3fbf1; }
+    .pill.failing { color: #c6284e; background: #ffe8ee; }
+    .pill.fixing { color: #9a6a00; background: #fff3d3; }
+    .agent-box { padding: 13px; border: 1px solid #e8ddff; border-radius: 13px; background: linear-gradient(135deg, #f6f1ff, #fff9ff); }
+    .agent-top { display: flex; align-items: center; gap: 9px; margin-bottom: 8px; }
+    .agent-avatar { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 9px; color: white; background: linear-gradient(135deg, #6b55e9, #a04bdb); }
+    .agent-state { color: #7752d8; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .7px; }
+    .agent-text { color: #66577f; font-size: 13px; }
+    .log { display: flex; flex-direction: column; gap: 8px; height: 210px; overflow: auto; padding: 12px; border: 1px solid #f0eafa; border-radius: 11px; background: #fcfbff; }
+    .log-entry { display: grid; grid-template-columns: 62px 1fr; gap: 9px; color: #65587d; font: 12px/1.45 ui-monospace, Consolas, monospace; }
+    .time { color: #a096b4; }
+    .log-entry.error .message { color: #ce3655; }
+    .log-entry.warn .message { color: #9a6a00; }
+    .log-entry.success .message { color: #16875f; }
+    footer { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 10px; margin: 16px 2px 0; color: #9387a6; font-size: 11px; }
+
+    @keyframes pulse {
+      0%, 100% { filter: drop-shadow(0 0 0 #ef476f00); }
+      50% { filter: drop-shadow(0 0 12px #ef476fcc); }
+    }
+    @media (max-width: 950px) {
+      .layout { grid-template-columns: 1fr; }
+      .mesh-wrap { min-height: 360px; }
+      #mesh { height: 360px; }
+    }
+    @media (max-width: 620px) {
+      .app { padding: 16px; }
+      .topbar { align-items: flex-start; flex-direction: column; padding: 22px; }
+      .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .value { font-size: 24px; }
+      .panel { padding: 13px; }
+      .mesh-wrap { min-height: 320px; }
+      #mesh { height: 320px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">
+        <div class="logo">⌘</div>
+        <div>
+          <h1>Self-Healing Microservice Mesh</h1>
+          <div class="subtitle">Live topology · Root-cause diagnosis · Controlled remediation</div>
+        </div>
+      </div>
+      <div class="live"><span class="dot"></span> SIMULATION LIVE</div>
+    </header>
+
+    <section class="stats">
+      <div class="stat"><div class="label">Services</div><div class="value">5</div><div class="hint">Tracked in the mesh</div></div>
+      <div class="stat"><div class="label">Healthy</div><div class="value" id="statHealthy">5</div><div class="hint">Responding normally</div></div>
+      <div class="stat"><div class="label">Active incidents</div><div class="value" id="statIncidents">0</div><div class="hint">Failing or recovering</div></div>
+      <div class="stat"><div class="label">Recovery checks</div><div class="value" id="statChecks">0</div><div class="hint">Post-fix validations</div></div>
+    </section>
+
+    <div class="layout">
+      <main class="panel">
+        <div class="panel-head">
+          <div><h2>Microservice topology</h2><div class="kicker">Select a node or inject a controlled failure.</div></div>
+          <div class="legend">
+            <span><i class="swatch" style="background:var(--green)"></i>Healthy</span>
+            <span><i class="swatch" style="background:var(--red)"></i>Failing</span>
+            <span><i class="swatch" style="background:var(--yellow)"></i>Agent fixing</span>
+          </div>
+        </div>
+
+        <div class="mesh-wrap">
+          <svg id="mesh" viewBox="0 0 720 430" role="img" aria-label="Interactive five-service topology">
+            <defs>
+              <marker id="arrow" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L0,6 L6,3 z" fill="#b9acd7"/></marker>
+              <marker id="arrowBad" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L0,6 L6,3 z" fill="#ef476f"/></marker>
+            </defs>
+            <path class="edge" data-from="gateway" data-to="auth" d="M190 110 L270 110" marker-end="url(#arrow)"/>
+            <path class="edge" data-from="gateway" data-to="orders" d="M145 145 L210 225" marker-end="url(#arrow)"/>
+            <path class="edge" data-from="auth" data-to="orders" d="M330 145 L275 215" marker-end="url(#arrow)"/>
+            <path class="edge" data-from="orders" data-to="payments" d="M310 250 L425 250" marker-end="url(#arrow)"/>
+            <path class="edge" data-from="orders" data-to="inventory" d="M255 285 L255 330" marker-end="url(#arrow)"/>
+            <path class="edge" data-from="payments" data-to="inventory" d="M450 285 L300 340" marker-end="url(#arrow)"/>
+
+            <g class="node healthy" data-id="gateway" tabindex="0" role="button" aria-label="API Gateway">
+              <rect x="55" y="75" width="135" height="70" rx="12"/><circle class="led" cx="72" cy="92" r="4"/>
+              <text x="122" y="105">API Gateway</text><text class="sub" x="122" y="125">edge routing</text>
+            </g>
+            <g class="node healthy" data-id="auth" tabindex="0" role="button" aria-label="Auth Service">
+              <rect x="270" y="75" width="135" height="70" rx="12"/><circle class="led" cx="287" cy="92" r="4"/>
+              <text x="337" y="105">Auth Service</text><text class="sub" x="337" y="125">identity checks</text>
+            </g>
+            <g class="node healthy" data-id="orders" tabindex="0" role="button" aria-label="Order Service">
+              <rect x="190" y="215" width="135" height="70" rx="12"/><circle class="led" cx="207" cy="232" r="4"/>
+              <text x="257" y="245">Order Service</text><text class="sub" x="257" y="265">order workflow</text>
+            </g>
+            <g class="node healthy" data-id="payments" tabindex="0" role="button" aria-label="Payment Service">
+              <rect x="425" y="215" width="135" height="70" rx="12"/><circle class="led" cx="442" cy="232" r="4"/>
+              <text x="492" y="245">Payment Service</text><text class="sub" x="492" y="265">transaction API</text>
+            </g>
+            <g class="node healthy" data-id="inventory" tabindex="0" role="button" aria-label="Inventory Service">
+              <rect x="190" y="330" width="135" height="70" rx="12"/><circle class="led" cx="207" cy="347" r="4"/>
+              <text x="257" y="360">Inventory</text><text class="sub" x="257" y="380">stock updates</text>
+            </g>
+            <text x="610" y="90" fill="#8a7aa6" font-size="11" text-anchor="middle">REQUEST FLOW</text>
+            <path d="M565 110 L620 110" stroke="#b9acd7" stroke-width="2" marker-end="url(#arrow)"/>
+            <text x="610" y="132" fill="#8a7aa6" font-size="10" text-anchor="middle">directed edges</text>
+          </svg>
+          <div class="mesh-caption">SIMULATED SERVICES · directional request flow</div>
+        </div>
+
+        <div class="controls">
+          <button class="danger" id="injectBtn">⚡ Inject failure</button>
+          <button class="primary" id="healBtn">✦ Run agent remediation</button>
+          <button id="resetBtn">↺ Reset simulation</button>
+        </div>
+        <div class="small-note">Demo UI only: events and recovery are simulated in the browser. Connect these actions to your backend/LangGraph agent for real diagnosis and remediation.</div>
+      </main>
+
+      <aside class="right-stack">
+        <section class="panel">
+          <div class="panel-head"><div><h2>Service health</h2><div class="kicker">Current state of each service</div></div></div>
+          <div class="status-list" id="serviceList"></div>
+        </section>
+        <section class="panel">
+          <div class="panel-head"><div><h2>Agent diagnosis</h2><div class="kicker">Hypothesis → action → validation</div></div></div>
+          <div class="agent-box">
+            <div class="agent-top"><div class="agent-avatar">✦</div><div><div style="font-weight:750">Root-Cause Agent</div><div class="agent-state" id="agentState">Monitoring</div></div></div>
+            <div class="agent-text" id="agentText">All services are healthy. Waiting for an incident to diagnose.</div>
+          </div>
+          <div class="small-note">The agent should only report recovery after the health re-check succeeds.</div>
+        </section>
+        <section class="panel">
+          <div class="panel-head"><div><h2>Event timeline</h2><div class="kicker">Recent simulated logs</div></div><button id="clearLogBtn">Clear</button></div>
+          <div class="log" id="log"></div>
+        </section>
+      </aside>
+    </div>
+    <footer><span>Frontend Part 1 · Microservice Topology Visualizer</span><span>Demo mode · No real services are modified</span></footer>
+  </div>
+
+  <script>
+    const services = {
+      gateway:  { name: "API Gateway",     desc: "Edge routing",     icon: "GW" },
+      auth:     { name: "Auth Service",    desc: "Identity checks",  icon: "AU" },
+      orders:   { name: "Order Service",   desc: "Order workflow",   icon: "OR" },
+      payments: { name: "Payment Service", desc: "Transaction API", icon: "PY" },
+      inventory:{ name: "Inventory",       desc: "Stock updates",    icon: "IN" }
+    };
+    const state = Object.fromEntries(Object.keys(services).map(id => [id, "healthy"]));
+    let rootCause = null;
+    let recoveryChecks = 0;
+    let remediationTimer = null;
+    const $ = id => document.getElementById(id);
+
+    function log(message, type = "") {
+      const row = document.createElement("div");
+      const time = document.createElement("span");
+      const text = document.createElement("span");
+      row.className = `log-entry ${type}`;
+      time.className = "time";
+      text.className = "message";
+      time.textContent = new Date().toLocaleTimeString([], { hour12: false });
+      text.textContent = message;
+      row.append(time, text);
+      $("log").prepend(row);
+      while ($("log").children.length > 35) $("log").lastElementChild.remove();
+    }
+
+    function setAgent(status, message) {
+      $("agentState").textContent = status;
+      $("agentText").textContent = message;
+    }
+
+    function render() {
+      const ids = Object.keys(state);
+      $("statHealthy").textContent = ids.filter(id => state[id] === "healthy").length;
+      $("statIncidents").textContent = ids.filter(id => state[id] !== "healthy").length;
+      $("statChecks").textContent = recoveryChecks;
+      $("serviceList").replaceChildren();
+
+      ids.forEach(id => {
+        const status = state[id];
+        const service = services[id];
+        const row = document.createElement("div");
+        row.className = "service-row";
+        row.innerHTML = `<div class="service-icon">${service.icon}</div>
+          <div><div class="service-name">${service.name}</div>
+          <div class="service-desc">${service.desc}</div></div>
+          <span class="pill ${status}">${status.toUpperCase()}</span>`;
+        $("serviceList").append(row);
+        document.querySelector(`.node[data-id="${id}"]`)
+          .setAttribute("class", `node ${status}${id === rootCause ? " root" : ""}`);
+      });
+
+      document.querySelectorAll(".edge").forEach(edge => {
+        const affected = edge.dataset.from === rootCause || edge.dataset.to === rootCause;
+        edge.setAttribute("class", `edge${affected ? " bad" : ""}`);
+        edge.setAttribute("marker-end", affected ? "url(#arrowBad)" : "url(#arrow)");
+      });
+    }
+
+    function injectFailure(id) {
+      const healthy = Object.keys(state).filter(key => state[key] === "healthy");
+      if (!id) id = healthy[Math.floor(Math.random() * healthy.length)];
+      if (!id || state[id] !== "healthy") {
+        log("No healthy service available. Reset or remediate the current incident first.", "warn");
+        return;
+      }
+      rootCause = id;
+      state[id] = "failing";
+      setAgent("Incident detected", `${services[id].name} is failing. The agent would correlate logs and inspect adjacent request paths.`);
+      log(`ERROR ${services[id].name}: simulated timeout / unhealthy response`, "error");
+      log(`TRACE request path flagged near ${services[id].name}`, "warn");
+      render();
+    }
+
+    function remediate() {
+      if (!rootCause || state[rootCause] !== "failing") {
+        setAgent("Monitoring", "No active failure. Inject a failure to demonstrate diagnosis and recovery.");
+        log("Agent check: no active incident.", "warn");
+        return;
+      }
+      const id = rootCause;
+      state[id] = "fixing";
+      setAgent("Remediation running", `Hypothesis: ${services[id].name} is the root cause. Simulating a controlled restart/rollback, then checking health.`);
+      log(`AGENT hypothesis: ${services[id].name} is the likely root cause.`, "warn");
+      render();
+      $("healBtn").disabled = true;
+      $("injectBtn").disabled = true;
+
+      remediationTimer = setTimeout(() => {
+        recoveryChecks++;
+        state[id] = "healthy";
+        log(`ACTION ${services[id].name}: simulated restart/rollback completed.`, "success");
+        log(`VERIFY ${services[id].name}: health check passed; recovery confirmed.`, "success");
+        setAgent("Recovery confirmed", `${services[id].name} passed the post-remediation health check. The agent declares success only after validation.`);
+        rootCause = null;
+        $("healBtn").disabled = false;
+        $("injectBtn").disabled = false;
+        render();
+      }, 1400);
+    }
+
+    document.querySelectorAll(".node").forEach(node => {
+      node.addEventListener("click", () => injectFailure(node.dataset.id));
+      node.addEventListener("keydown", event => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          injectFailure(node.dataset.id);
+        }
+      });
+    });
+
+    $("injectBtn").addEventListener("click", () => injectFailure());
+    $("healBtn").addEventListener("click", remediate);
+    $("resetBtn").addEventListener("click", () => {
+      if (remediationTimer) clearTimeout(remediationTimer);
+      remediationTimer = null;
+      Object.keys(state).forEach(id => state[id] = "healthy");
+      rootCause = null;
+      $("healBtn").disabled = false;
+      $("injectBtn").disabled = false;
+      setAgent("Monitoring", "All services are healthy. Waiting for an incident to diagnose.");
+      log("Simulation reset: all five services healthy.", "success");
+      render();
+    });
+    $("clearLogBtn").addEventListener("click", () => $("log").replaceChildren());
+
+    log("Mesh initialized: 5 services healthy; request flow active.", "success");
+    log("Agent monitoring simulated service health and event stream.");
+    render();
+  </script>
+</body>
+</html>
