@@ -1,0 +1,1257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Self-Healing Microservice Mesh · Frontend 2: Agent Thought Stream & Control Panel</title>
+  <style>
+    :root {
+      --purple: #6b54e8;
+      --pink: #9747d8;
+      --text: #2c1c50;
+      --muted: #9286a6;
+      --border: #eee7f8;
+      --green: #20b985;
+      --red: #ef476f;
+      --yellow: #f3b632;
+      --blue: #3b82f6;
+      --terminal-bg: #17112b;
+      --terminal-border: #2f2354;
+      --terminal-text: #ebe5ff;
+      --terminal-muted: #9586ba;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      color: var(--text);
+      background: #fff;
+      font: 15px/1.5 Inter, "Segoe UI", system-ui, sans-serif;
+    }
+    button, select { font: inherit; cursor: pointer; }
+    button:disabled { opacity: .5; cursor: not-allowed; }
+
+    .app { max-width: 1480px; margin: auto; padding: 24px 30px 30px; }
+    .topbar {
+      display: flex; align-items: center; justify-content: space-between; gap: 20px;
+      position: relative; isolation: isolate; overflow: hidden;
+      margin-bottom: 22px; padding: 28px 30px; border-radius: 20px;
+      color: white; background: linear-gradient(115deg, #5a55e9, #7649e6 52%, #9945d8);
+      box-shadow: 0 18px 40px #6545cf2b;
+    }
+    .topbar::after {
+      content: ""; position: absolute; z-index: -1; width: 390px; height: 390px;
+      right: 7%; top: -230px; border: 1px solid #ffffff26; border-radius: 50%;
+      box-shadow: 0 0 0 34px #ffffff0b, 0 0 0 70px #ffffff08;
+    }
+    .brand { display: flex; align-items: center; gap: 15px; }
+    .logo {
+      display: grid; place-items: center; width: 44px; height: 44px;
+      border: 1px solid #ffffff44; border-radius: 14px; color: white;
+      background: #ffffff20; font-size: 23px; font-weight: 900;
+    }
+    h1 { margin: 0; color: white; font-size: clamp(24px, 3vw, 35px); line-height: 1.15; letter-spacing: -1px; }
+    .subtitle { margin-top: 6px; color: #eee9ff; }
+    .topbar-right { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .live {
+      display: flex; align-items: center; gap: 8px; white-space: nowrap;
+      padding: 8px 12px; border: 1px solid #ffffff50; border-radius: 999px;
+      color: white; background: #ffffff19; font-size: 12px; font-weight: 600;
+    }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: #73f5c6; box-shadow: 0 0 12px #73f5c6; }
+    .dot.busy { background: var(--yellow); box-shadow: 0 0 12px var(--yellow); animation: blink .9s infinite; }
+    .dot.alert { background: var(--red); box-shadow: 0 0 12px var(--red); animation: blink .6s infinite; }
+
+    .stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 15px; margin-bottom: 16px; }
+    .stat, .panel {
+      min-width: 0; border: 1px solid var(--border); border-radius: 16px;
+      background: white; box-shadow: 0 7px 24px #43266c0a;
+    }
+    .stat { padding: 17px 19px; }
+    .label { color: #827696; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; }
+    .value { margin-top: 5px; color: #3f267f; font-size: 28px; font-weight: 750; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .hint { color: #958aa7; font-size: 12px; margin-top: 2px; }
+
+    .layout { display: grid; grid-template-columns: minmax(0, 1.8fr) minmax(320px, .95fr); gap: 16px; }
+    .panel { padding: 20px; }
+    .panel-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 14px; flex-wrap: wrap; }
+    h2 { margin: 0; color: var(--text); font-size: 17px; }
+    .kicker { margin-top: 4px; color: var(--muted); font-size: 12px; }
+
+    /* LangGraph Stepper */
+    .graph-stepper {
+      display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px;
+      margin-bottom: 14px;
+    }
+    .step-node {
+      position: relative; padding: 11px 12px; border: 1px solid #e7def9; border-radius: 12px;
+      background: #fbf9ff; transition: all .2s ease;
+    }
+    .step-node .step-head { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-bottom: 4px; }
+    .step-badge {
+      display: inline-flex; align-items: center; justify-content: center;
+      padding: 2px 7px; border-radius: 999px; font-size: 10px; font-weight: 800;
+      color: #6b54e8; background: #ede7ff; letter-spacing: .4px;
+    }
+    .step-dot { width: 8px; height: 8px; border-radius: 50%; background: #cbbef0; }
+    .step-title { font-size: 13px; font-weight: 750; color: #35255a; }
+    .step-desc { font-size: 11px; color: #8d82a3; }
+
+    .step-node.active {
+      border-color: var(--purple); background: linear-gradient(135deg, #f3eeff, #fdfaff);
+      box-shadow: 0 6px 18px #6b54e824; transform: translateY(-1px);
+    }
+    .step-node.active .step-dot { background: var(--yellow); box-shadow: 0 0 10px var(--yellow); animation: blink .8s infinite; }
+    .step-node.done { border-color: #bcebd9; background: #f3fcf8; }
+    .step-node.done .step-badge { color: #117a56; background: #d7f7ea; }
+    .step-node.done .step-dot { background: var(--green); }
+    .step-node.backtrack { border-color: #ffc2d1; background: #fff4f7; }
+    .step-node.backtrack .step-badge { color: #c6284e; background: #ffe0e8; }
+    .step-node.backtrack .step-dot { background: var(--red); }
+
+    /* Terminal / Thought Stream */
+    .terminal-wrap {
+      border: 1px solid var(--terminal-border); border-radius: 14px;
+      background: var(--terminal-bg); color: var(--terminal-text);
+      overflow: hidden; box-shadow: inset 0 2px 16px #00000045;
+    }
+    .terminal-bar {
+      display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;
+      padding: 10px 14px; background: #21193b; border-bottom: 1px solid var(--terminal-border);
+    }
+    .win-dots { display: flex; align-items: center; gap: 7px; }
+    .win-dot { width: 10px; height: 10px; border-radius: 50%; }
+    .win-title {
+      margin-left: 6px; color: #cfc3f4; font: 600 12px/1 ui-monospace, SFMono-Regular, Consolas, monospace;
+    }
+    .terminal-tools { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+    .filter-chip {
+      padding: 4px 9px; border: 1px solid #3c2e67; border-radius: 999px;
+      background: #281f47; color: #bfb2e6; font-size: 11px; font-weight: 600;
+    }
+    .filter-chip:hover { background: #34285b; color: white; }
+    .filter-chip.active { background: var(--purple); border-color: #8c77f7; color: white; }
+
+    .thought-stream {
+      height: 365px; overflow-y: auto; padding: 14px;
+      display: flex; flex-direction: column; gap: 10px;
+      font: 12.5px/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      scroll-behavior: smooth;
+    }
+    .thought-card {
+      padding: 11px 13px; border-radius: 10px;
+      border: 1px solid #2f2454; background: #1e1736;
+      animation: slideIn .18s ease-out;
+    }
+    .thought-card.alert { border-left: 3px solid var(--red); background: #26162c; }
+    .thought-card.analyze { border-left: 3px solid #60a5fa; }
+    .thought-card.hypothesize { border-left: 3px solid #c084fc; }
+    .thought-card.remediate { border-left: 3px solid var(--yellow); }
+    .thought-card.verify { border-left: 3px solid var(--green); }
+    .thought-card.success { border-left: 3px solid var(--green); background: #142929; }
+
+    .thought-meta {
+      display: flex; align-items: center; justify-content: space-between; gap: 8px;
+      margin-bottom: 5px; font-size: 11px; color: var(--terminal-muted);
+    }
+    .thought-tag {
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 2px 7px; border-radius: 5px; font-weight: 700; font-size: 10.5px;
+      text-transform: uppercase; letter-spacing: .5px;
+    }
+    .tag-alert { color: #ff8fa8; background: #ef476f26; }
+    .tag-analyze { color: #93c5fd; background: #3b82f626; }
+    .tag-hypothesize { color: #d8b4fe; background: #a855f726; }
+    .tag-remediate { color: #fde047; background: #f3b63226; }
+    .tag-verify { color: #6ee7b7; background: #20b98526; }
+    .tag-success { color: #6ee7b7; background: #20b98533; }
+    .tag-system { color: #c4b5fd; background: #6b54e826; }
+
+    .thought-body { color: #f1ecff; word-break: break-word; }
+    .thought-detail {
+      margin-top: 7px; padding: 7px 9px; border-radius: 7px;
+      background: #130e24; border: 1px solid #2b204d; color: #b6a9db; font-size: 11.5px;
+    }
+    .code-inline {
+      padding: 1px 5px; border-radius: 4px; background: #2d2250; color: #e9d5ff;
+    }
+
+    .terminal-footer {
+      display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;
+      padding: 9px 14px; background: #1c1533; border-top: 1px solid var(--terminal-border);
+      font-size: 11px; color: var(--terminal-muted);
+    }
+    .stream-indicator { display: flex; align-items: center; gap: 7px; }
+    .cursor-block {
+      display: inline-block; width: 7px; height: 13px; background: #a78bfa;
+      vertical-align: middle; animation: blink 1s step-end infinite;
+    }
+
+    /* Demo Control Panel Buttons */
+    .control-section { margin-top: 16px; }
+    .control-header {
+      display: flex; align-items: center; justify-content: space-between; gap: 8px;
+      margin-bottom: 9px; font-size: 12px; font-weight: 700; color: #544179;
+      text-transform: uppercase; letter-spacing: .6px;
+    }
+    .controls-grid {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(175px, 1fr)); gap: 9px;
+    }
+    button {
+      padding: 10px 13px; border: 1px solid #e6dcf8; border-radius: 10px;
+      color: #5a428d; background: #f8f5ff; font-weight: 650; font-size: 12px;
+      box-shadow: 0 2px 4px #3c1d6808; transition: all .15s ease;
+      display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+    }
+    button:hover:not(:disabled) { background: #f0e8ff; border-color: #d5c4fa; transform: translateY(-1px); }
+    button.primary { color: white; border-color: #7651e2; background: linear-gradient(110deg, #6a54e8, #9345d8); }
+    button.primary:hover:not(:disabled) { background: linear-gradient(110deg, #5944d7, #8236ca); }
+    button.danger { color: #c82e52; border-color: #ffd0da; background: #fff0f3; }
+    button.danger:hover:not(:disabled) { background: #ffe3e9; border-color: #ffbac9; }
+    button.warn { color: #8c5d00; border-color: #fde3a7; background: #fff9eb; }
+    button.warn:hover:not(:disabled) { background: #fff1cf; }
+
+    .action-bar {
+      display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
+      gap: 9px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border);
+    }
+    .action-group { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    .small-note { margin-top: 10px; color: #9387a6; font-size: 11px; }
+
+    /* Right Column Panels */
+    .right-stack { display: flex; flex-direction: column; gap: 16px; }
+    .hypothesis-box {
+      padding: 14px; border: 1px solid #e8ddff; border-radius: 13px;
+      background: linear-gradient(135deg, #f6f1ff, #fff9ff);
+    }
+    .agent-top { display: flex; align-items: center; justify-content: space-between; gap: 9px; margin-bottom: 10px; }
+    .agent-id { display: flex; align-items: center; gap: 9px; }
+    .agent-avatar {
+      display: grid; place-items: center; width: 34px; height: 34px;
+      border-radius: 10px; color: white; font-weight: 800;
+      background: linear-gradient(135deg, #6b55e9, #a04bdb);
+    }
+    .agent-state {
+      color: #7752d8; font-size: 11px; font-weight: 800;
+      text-transform: uppercase; letter-spacing: .7px;
+    }
+    .kv-list { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; font-size: 12px; }
+    .kv-row {
+      display: flex; justify-content: space-between; align-items: center; gap: 8px;
+      padding: 7px 10px; border-radius: 8px; background: #ffffffb8; border: 1px solid #ede5fa;
+    }
+    .kv-key { color: #7e7294; font-weight: 600; }
+    .kv-val { color: #34215c; font-weight: 700; font-family: ui-monospace, Consolas, monospace; font-size: 11.5px; text-align: right; }
+
+    .conf-meter { margin-top: 10px; }
+    .conf-head { display: flex; justify-content: space-between; font-size: 11px; font-weight: 700; color: #5b4882; margin-bottom: 4px; }
+    .conf-track { height: 7px; border-radius: 999px; background: #e9e0f9; overflow: hidden; }
+    .conf-fill { height: 100%; width: 0%; border-radius: 999px; background: linear-gradient(90deg, #6b54e8, #20b985); transition: width .35s ease; }
+
+    /* Service Health Mini List */
+    .status-list { display: flex; flex-direction: column; gap: 8px; }
+    .service-row {
+      display: flex; align-items: center; gap: 10px; padding: 9px 11px;
+      border: 1px solid #f0eafa; border-radius: 11px; background: #fcfbff;
+      cursor: pointer; transition: border-color .15s ease, background .15s ease;
+    }
+    .service-row:hover { border-color: #d9cbf7; background: #f7f3ff; }
+    .service-icon {
+      display: grid; place-items: center; width: 32px; height: 32px;
+      border-radius: 9px; color: #7252cb; background: #f0eaff; font-weight: 800; font-size: 12px;
+    }
+    .service-name { color: #37245f; font-size: 12.5px; font-weight: 650; }
+    .service-desc { color: #9387a6; font-size: 11px; }
+    .pill {
+      margin-left: auto; padding: 4px 8px; border-radius: 999px;
+      font-size: 10px; font-weight: 800; letter-spacing: .4px;
+    }
+    .pill.healthy { color: #12845f; background: #e3fbf1; }
+    .pill.failing { color: #c6284e; background: #ffe8ee; }
+    .pill.fixing { color: #9a6a00; background: #fff3d3; }
+
+    /* Runtime Config Toggles */
+    .config-list { display: flex; flex-direction: column; gap: 9px; }
+    .config-row {
+      display: flex; align-items: center; justify-content: space-between; gap: 10px;
+      padding: 9px 11px; border: 1px solid #f0eafa; border-radius: 11px; background: #fcfbff;
+      font-size: 12px;
+    }
+    .config-title { font-weight: 700; color: #37245f; }
+    .config-sub { font-size: 11px; color: #9387a6; }
+    .switch {
+      position: relative; display: inline-block; width: 38px; height: 21px; flex-shrink: 0;
+    }
+    .switch input { opacity: 0; width: 0; height: 0; }
+    .slider {
+      position: absolute; cursor: pointer; inset: 0; background: #dcd2f0;
+      border-radius: 999px; transition: .2s;
+    }
+    .slider::before {
+      content: ""; position: absolute; height: 15px; width: 15px; left: 3px; bottom: 3px;
+      background: white; border-radius: 50%; transition: .2s;
+    }
+    .switch input:checked + .slider { background: var(--purple); }
+    .switch input:checked + .slider::before { transform: translateX(17px); }
+
+    select.speed-select {
+      padding: 5px 9px; border: 1px solid #dfd3f8; border-radius: 8px;
+      background: #f8f5ff; color: #4a337a; font-size: 12px; font-weight: 600;
+    }
+
+    footer {
+      display: flex; justify-content: space-between; flex-wrap: wrap; gap: 10px;
+      margin: 16px 2px 0; color: #9387a6; font-size: 11px;
+    }
+
+    @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: .25; } }
+    @keyframes slideIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+
+    @media (max-width: 1020px) {
+      .layout { grid-template-columns: 1fr; }
+      .graph-stepper { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+    @media (max-width: 620px) {
+      .app { padding: 16px; }
+      .topbar { align-items: flex-start; flex-direction: column; padding: 22px; }
+      .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .graph-stepper { grid-template-columns: 1fr; }
+      .value { font-size: 22px; }
+      .panel { padding: 14px; }
+      .thought-stream { height: 310px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">
+        <div class="logo">⌘</div>
+        <div>
+          <h1>Self-Healing Microservice Mesh</h1>
+          <div class="subtitle">LangGraph thought stream · Chaos injection · Autonomous remediation control</div>
+        </div>
+      </div>
+      <div class="topbar-right">
+        <div class="live"><span class="dot" id="liveDot"></span> <span id="liveBadgeText">LANGGRAPH AGENT READY</span></div>
+      </div>
+    </header>
+
+    <section class="stats">
+      <div class="stat">
+        <div class="label">LangGraph Node</div>
+        <div class="value" id="statNode">IDLE</div>
+        <div class="hint" id="statNodeHint">Monitoring log stream</div>
+      </div>
+      <div class="stat">
+        <div class="label">Root-Cause Confidence</div>
+        <div class="value" id="statConfidence">—</div>
+        <div class="hint" id="statConfidenceHint">LLM trace correlation score</div>
+      </div>
+      <div class="stat">
+        <div class="label">Traces Correlated</div>
+        <div class="value" id="statTraces">142</div>
+        <div class="hint">Distributed spans inspected</div>
+      </div>
+      <div class="stat">
+        <div class="label">Closed-Loop Heals</div>
+        <div class="value" id="statHeals">0</div>
+        <div class="hint" id="statHealsHint">0 backtracks · 100% verified</div>
+      </div>
+    </section>
+
+    <div class="layout">
+      <main class="panel">
+        <div class="panel-head">
+          <div>
+            <h2>LangGraph Agent Thought Stream</h2>
+            <div class="kicker">Live internal reasoning: Analyze → Hypothesize → Remediate → Verify ("test-your-own-fix" loop)</div>
+          </div>
+          <div class="action-group">
+            <button id="stepOnceBtn" title="Advance one LangGraph node manually">⏭ Step node</button>
+            <button id="copyLogsBtn" title="Copy formatted agent trace to clipboard">📋 Copy trace</button>
+            <button id="clearStreamBtn">Clear stream</button>
+          </div>
+        </div>
+
+        <!-- 4-Step LangGraph Node Visualizer -->
+        <div class="graph-stepper" id="graphStepper">
+          <div class="step-node" data-step="analyze">
+            <div class="step-head"><span class="step-badge">STEP 1</span><span class="step-dot"></span></div>
+            <div class="step-title">1. Analyze</div>
+            <div class="step-desc">Ingest logs & correlate trace_id</div>
+          </div>
+          <div class="step-node" data-step="hypothesize">
+            <div class="step-head"><span class="step-badge">STEP 2</span><span class="step-dot"></span></div>
+            <div class="step-title">2. Hypothesize</div>
+            <div class="step-desc">Isolate root-cause service</div>
+          </div>
+          <div class="step-node" data-step="remediate">
+            <div class="step-head"><span class="step-badge">STEP 3</span><span class="step-dot"></span></div>
+            <div class="step-title">3. Remediate</div>
+            <div class="step-desc">Controlled rollback / restart</div>
+          </div>
+          <div class="step-node" data-step="verify">
+            <div class="step-head"><span class="step-badge">STEP 4</span><span class="step-dot"></span></div>
+            <div class="step-title">4. Verify Health</div>
+            <div class="step-desc">Confirm error rate = 0%</div>
+          </div>
+        </div>
+
+        <!-- Auto-Scrolling Terminal / Card Component -->
+        <div class="terminal-wrap">
+          <div class="terminal-bar">
+            <div class="win-dots">
+              <span class="win-dot" style="background:#ef476f"></span>
+              <span class="win-dot" style="background:#f3b632"></span>
+              <span class="win-dot" style="background:#20b985"></span>
+              <span class="win-title">agent/graph.py — LangGraph SRE Stream</span>
+            </div>
+            <div class="terminal-tools" id="filterBar">
+              <button class="filter-chip active" data-filter="all">All</button>
+              <button class="filter-chip" data-filter="alert">Alerts</button>
+              <button class="filter-chip" data-filter="analyze">Analyze</button>
+              <button class="filter-chip" data-filter="hypothesize">Hypothesize</button>
+              <button class="filter-chip" data-filter="remediate">Remediate</button>
+              <button class="filter-chip" data-filter="verify">Verify</button>
+            </div>
+          </div>
+
+          <div class="thought-stream" id="thoughtStream" role="log" aria-live="polite"></div>
+
+          <div class="terminal-footer">
+            <div class="stream-indicator">
+              <span class="cursor-block"></span>
+              <span id="terminalStatusText">Listening on structured JSON log stream (5 microservices)...</span>
+            </div>
+            <div>
+              <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer">
+                <input type="checkbox" id="autoScrollToggle" checked> Auto-scroll terminal
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <!-- Manual Action Buttons for Presentation Demos -->
+        <div class="control-section">
+          <div class="control-header">
+            <span>Presentation Chaos Triggers (Manual Failure Injection)</span>
+            <span id="activeScenarioLabel" style="color:var(--purple)">Ready for injection</span>
+          </div>
+          <div class="controls-grid">
+            <button class="danger" id="btnDbLock">⚡ [Inject DB Lock]</button>
+            <button class="danger" id="btnLatencySpike">📈 [Inject Latency Spike]</button>
+            <button class="danger" id="btnMemoryLeak">🧠 [Inject Memory Leak]</button>
+            <button class="danger" id="btnAuthDrift">🔐 [Inject Auth Token Drift]</button>
+            <button class="warn" id="btnBacktrackDemo">🔄 [Inject Retry Storm · Backtrack]</button>
+          </div>
+
+          <div class="action-bar">
+            <div class="action-group">
+              <button class="primary" id="runAgentBtn">✦ Trigger Agent Diagnosis Now</button>
+              <button id="resetMeshBtn">↺ [Reset Mesh]</button>
+            </div>
+            <div class="small-note" style="margin:0">
+              Synced via <code style="color:#5a428d;font-weight:700">BroadcastChannel</code> &amp; <code style="color:#5a428d;font-weight:700">localStorage</code> with Frontend 1 (Topology) &amp; Frontend 3 (Metrics).
+            </div>
+          </div>
+        </div>
+      </main>
+
+      <aside class="right-stack">
+        <!-- Active Hypothesis & Trace Correlation Panel -->
+        <section class="panel">
+          <div class="panel-head">
+            <div>
+              <h2>Active Root-Cause Hypothesis</h2>
+              <div class="kicker">Isolated culprit &amp; remediation plan</div>
+            </div>
+          </div>
+          <div class="hypothesis-box">
+            <div class="agent-top">
+              <div class="agent-id">
+                <div class="agent-avatar">✦</div>
+                <div>
+                  <div style="font-weight:750;font-size:14px" id="hypTitle">No Active Incident</div>
+                  <div class="agent-state" id="hypStage">MONITORING MESH</div>
+                </div>
+              </div>
+              <span class="pill healthy" id="hypBadge">HEALTHY</span>
+            </div>
+            <div style="color:#66577f;font-size:12.5px" id="hypSummary">
+              Select a chaos trigger on the left (e.g., <b>[Inject DB Lock]</b> or <b>[Inject Latency Spike]</b>) to stream the LangGraph agent's diagnostic reasoning.
+            </div>
+
+            <div class="conf-meter">
+              <div class="conf-head">
+                <span>Hypothesis Confidence</span>
+                <span id="hypConfValue">0%</span>
+              </div>
+              <div class="conf-track"><div class="conf-fill" id="hypConfBar"></div></div>
+            </div>
+
+            <div class="kv-list">
+              <div class="kv-row"><span class="kv-key">Correlated trace_id</span><span class="kv-val" id="kvTraceId">—</span></div>
+              <div class="kv-row"><span class="kv-key">Propagation path</span><span class="kv-val" id="kvPath">gateway → mesh</span></div>
+              <div class="kv-row"><span class="kv-key">Root-cause service</span><span class="kv-val" id="kvCulprit">None</span></div>
+              <div class="kv-row"><span class="kv-key">Remediation action</span><span class="kv-val" id="kvAction">Standby</span></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 5-Service Mesh Sync Status -->
+        <section class="panel">
+          <div class="panel-head">
+            <div>
+              <h2>Mesh Service Status (5 Nodes)</h2>
+              <div class="kicker">Click any service to inject targeted chaos</div>
+            </div>
+          </div>
+          <div class="status-list" id="serviceStatusList"></div>
+        </section>
+
+        <!-- CLI Flags / Agent Configuration -->
+        <section class="panel">
+          <div class="panel-head">
+            <div>
+              <h2>Agent Runtime Flags (<code style="font-size:13px">main.py</code>)</h2>
+              <div class="kicker">Control autonomous loop behavior during demo</div>
+            </div>
+          </div>
+          <div class="config-list">
+            <div class="config-row">
+              <div>
+                <div class="config-title">Autonomous Self-Healing</div>
+                <div class="config-sub">Auto-start LangGraph on anomaly detection</div>
+              </div>
+              <label class="switch" aria-label="Autonomous Self-Healing">
+                <input type="checkbox" id="toggleAutoHeal" checked>
+                <span class="slider"></span>
+              </label>
+            </div>
+            <div class="config-row">
+              <div>
+                <div class="config-title">Dry-Run Mode (<code>--dry-run</code>)</div>
+                <div class="config-sub">Diagnose root cause without executing fix</div>
+              </div>
+              <label class="switch" aria-label="Dry-Run Mode">
+                <input type="checkbox" id="toggleDryRun">
+                <span class="slider"></span>
+              </label>
+            </div>
+            <div class="config-row">
+              <div>
+                <div class="config-title">Verbose JSON Payloads (<code>--verbose</code>)</div>
+                <div class="config-sub">Show raw trace headers &amp; state diffs</div>
+              </div>
+              <label class="switch" aria-label="Verbose JSON Payloads">
+                <input type="checkbox" id="toggleVerbose" checked>
+                <span class="slider"></span>
+              </label>
+            </div>
+            <div class="config-row">
+              <div>
+                <div class="config-title">Thought Stream Pacing</div>
+                <div class="config-sub">Adjust step delay for live presentations</div>
+              </div>
+              <select class="speed-select" id="speedSelect" aria-label="Thought Stream Pacing">
+                <option value="1100">1x Presentation</option>
+                <option value="550">2x Fast Demo</option>
+                <option value="1800">0.6x Detailed</option>
+              </select>
+            </div>
+          </div>
+        </section>
+      </aside>
+    </div>
+
+    <footer>
+      <span>Frontend Part 2 · Agent Thought Stream &amp; Control Panel</span>
+      <span>LangGraph State Machine · Works standalone or alongside Frontend 1 &amp; 3</span>
+    </footer>
+  </div>
+
+  <script>
+    const services = {
+      gateway:   { name: "API Gateway",     slug: "api-gateway",       desc: "Edge routing",     icon: "GW" },
+      auth:      { name: "Auth Service",    slug: "auth-service",      desc: "Identity checks",  icon: "AU" },
+      orders:    { name: "Order Service",   slug: "order-service",     desc: "Order workflow",   icon: "OR" },
+      payments:  { name: "Payment Service", slug: "payment-service",   desc: "Transaction API",  icon: "PY" },
+      inventory: { name: "Inventory",       slug: "inventory-service", desc: "Stock updates",    icon: "IN" }
+    };
+
+    const chaosScenarios = {
+      dbLock: {
+        id: "dbLock",
+        label: "DB Connection Pool Lock",
+        rootService: "payments",
+        symptomService: "orders",
+        traceId: "trc-8f41a-902c",
+        path: "api-gateway → order-service → payment-service",
+        confidence: 92,
+        alertMsg: "Anomaly detected in 'payment-service': HTTP 500 spike (Rate: 48/min) & DB pool acquire timeout (5000ms).",
+        analyzeMsg: "Step 1: Ingesting structured logs... Correlating trace_id=trc-8f41a-902c across [api-gateway -> order-service -> payment-service -> db-cluster].",
+        analyzeDetail: `{"trace_id":"trc-8f41a-902c","spans":[{"svc":"api-gateway","status":502,"ms":5014},{"svc":"order-service","status":500,"ms":5008},{"svc":"payment-service","error":"PoolExhaustedError: active=50/50, waiting=38"}]}`,
+        hypothesizeMsg: "Step 2: Root cause isolated — Connection pool exhaustion in 'payment-service' triggered by unclosed row locks from 'order-service' v1.4.2.",
+        hypothesizeDetail: `LLM Hypothesis: payment-service (Confidence: 92%) | Upstream trigger: unclosed transaction handles in v1.4.2 deployment.`,
+        remediateMsg: "Step 3: Triggering controlled remediation — Rolling back 'payment-service' to stable tag v1.4.1 & flushing stale DB connection pool.",
+        remediateDetail: `ACTION: kubectl rollout undo deployment/payment-service --to-revision=14 && pg_terminate_backend(stale_pids)`,
+        verifyMsg: "Step 4: Re-scanning live log stream for 'payment-service'... HTTP 500 error rate dropped from 48/min to 0%. Latency normalized (41ms).",
+        verifyDetail: `HEALTH_CHECK: payment-service=200 OK | active_connections=6/50 | error_rate=0.0% | incident_status=CLOSED`,
+        actionShort: "Rollback v1.4.1 + Flush DB Pool"
+      },
+      latencySpike: {
+        id: "latencySpike",
+        label: "Downstream p95 Latency Spike",
+        rootService: "orders",
+        symptomService: "gateway",
+        traceId: "trc-3c19e-774a",
+        path: "api-gateway → auth-service → order-service",
+        confidence: 89,
+        alertMsg: "Anomaly detected in 'order-service': p95 latency spiked to 2,840ms (SLO threshold: 250ms).",
+        analyzeMsg: "Step 1: Ingesting logs... Correlating trace_id=trc-3c19e-774a across [api-gateway -> auth-service -> order-service].",
+        analyzeDetail: `{"trace_id":"trc-3c19e-774a","p95_ms":2840,"thread_dump":"order-service worker pool saturated on synchronous payload serialization"}`,
+        hypothesizeMsg: "Step 2: Root cause isolated — Thread pool starvation in 'order-service' caused by unbounded synchronous N+1 query loop.",
+        hypothesizeDetail: `LLM Hypothesis: order-service (Confidence: 89%) | Auth & Gateway are healthy upstream victims.`,
+        remediateMsg: "Step 3: Triggering controlled service restart on 'order-service' & enabling async batching flag.",
+        remediateDetail: `ACTION: systemctl restart order-service && feature_flag set ORDER_ASYNC_BATCH=true`,
+        verifyMsg: "Step 4: Verifying post-remediation metrics... 'order-service' p95 latency recovered to 38ms; error rate 0%.",
+        verifyDetail: `HEALTH_CHECK: order-service=200 OK | p95_latency=38ms | rps=310/s | incident_status=CLOSED`,
+        actionShort: "Controlled Restart + Async Flag"
+      },
+      memoryLeak: {
+        id: "memoryLeak",
+        label: "Container Memory Leak (OOM)",
+        rootService: "inventory",
+        symptomService: "payments",
+        traceId: "trc-6d90b-118f",
+        path: "order-service → payment-service → inventory-service",
+        confidence: 95,
+        alertMsg: "Anomaly detected in 'inventory-service': Container RSS memory at 98.4% (OOMKill imminent), stock reservation timeouts.",
+        analyzeMsg: "Step 1: Ingesting logs... Correlating trace_id=trc-6d90b-118f across [order-service -> payment-service -> inventory-service].",
+        analyzeDetail: `{"trace_id":"trc-6d90b-118f","svc":"inventory-service","heap_mb":1984,"limit_mb":2048,"gc_pause_ms":1420}`,
+        hypothesizeMsg: "Step 2: Root cause isolated — Unbounded in-memory SKU cache retention in 'inventory-service' v2.1.0.",
+        hypothesizeDetail: `LLM Hypothesis: inventory-service (Confidence: 95%) | Memory growth +42MB/min since tag v2.1.0.`,
+        remediateMsg: "Step 3: Triggering controlled rollback of 'inventory-service' to v2.0.8 and draining leaked worker pod.",
+        remediateDetail: `ACTION: rollback inventory-service -> v2.0.8 && drain pod inventory-7f9b4c`,
+        verifyMsg: "Step 4: Re-checking 'inventory-service' telemetry... Heap stabilized at 310MB (15%); 0 dropped stock updates.",
+        verifyDetail: `HEALTH_CHECK: inventory-service=200 OK | memory_rss=15.1% | error_rate=0.0%`,
+        actionShort: "Rollback v2.0.8 + Pod Drain"
+      },
+      authDrift: {
+        id: "authDrift",
+        label: "JWT Signing Key Drift",
+        rootService: "auth",
+        symptomService: "gateway",
+        traceId: "trc-5a22c-609d",
+        path: "api-gateway → auth-service → order-service",
+        confidence: 91,
+        alertMsg: "Anomaly detected in 'auth-service': 401/500 signature verification failures surging at 'api-gateway' (Rate: 64/min).",
+        analyzeMsg: "Step 1: Ingesting logs... Correlating trace_id=trc-5a22c-609d between [api-gateway -> auth-service].",
+        analyzeDetail: `{"trace_id":"trc-5a22c-609d","svc":"auth-service","err":"JWKS kid='key-2026-10' missing from replica cache"}`,
+        hypothesizeMsg: "Step 2: Root cause isolated — Stale JWKS public key cache in 'auth-service' replica set after key rotation.",
+        hypothesizeDetail: `LLM Hypothesis: auth-service (Confidence: 91%) | Token validation failing on 2 of 3 replicas.`,
+        remediateMsg: "Step 3: Triggering JWKS cache flush and rolling restart across 'auth-service' replicas.",
+        remediateDetail: `ACTION: redis-cli -h auth-cache FLUSHDB && rollout restart deployment/auth-service`,
+        verifyMsg: "Step 4: Verifying 'auth-service' token handshakes... 100% signature validation success; 0 errors at gateway.",
+        verifyDetail: `HEALTH_CHECK: auth-service=200 OK | jwks_kid=key-2026-10 | error_rate=0.0%`,
+        actionShort: "Flush JWKS Cache + Rolling Restart"
+      },
+      backtrackDemo: {
+        id: "backtrackDemo",
+        label: "Multi-Hop Retry Storm (Backtrack Loop)",
+        rootService: "payments",
+        symptomService: "orders",
+        traceId: "trc-9b77f-331e",
+        path: "api-gateway → order-service → payment-service → inventory-service",
+        confidence: 76,
+        confidenceRetry: 96,
+        backtrack: true,
+        alertMsg: "Anomaly detected across 'order-service' & 'payment-service': Cascading HTTP 503 Retry Storm (Rate: 112/min).",
+        analyzeMsg: "Step 1: Ingesting logs... Correlating trace_id=trc-9b77f-331e across 4 interconnected services.",
+        analyzeDetail: `{"trace_id":"trc-9b77f-331e","order_retries":112,"payment_503":94,"gateway_timeout":61}`,
+        hypothesizeMsg: "Step 2 (Hypothesis #1): Suspecting 'order-service' retry amplification as primary root cause (Confidence: 76%).",
+        hypothesizeDetail: `Initial Hypothesis: order-service v1.4.2 aggressive retry policy flooding downstream.`,
+        remediateMsg: "Step 3 (Attempt #1): Restarting 'order-service' workers and resetting circuit breaker.",
+        remediateDetail: `ACTION #1: restart order-service && circuit_breaker.reset('order-service')`,
+        verifyFailMsg: "Step 4 (Verify #1 FAILED): Re-scanning logs... HTTP 503 errors persist (Rate: 84/min)! Symptoms did not clear — backtracking to test alternate hypothesis.",
+        verifyFailDetail: `VERIFY_FAIL: error_rate=84/min (> 0%). LangGraph conditional edge -> BACKTRACK to Hypothesize node.`,
+        hypothesizeRetryMsg: "Step 2 (Hypothesis #2 - Backtracked): Deeper trace inspection reveals 'payment-service' deadlock is stalling 'order-service' threads (Confidence: 96%).",
+        hypothesizeRetryDetail: `Revised Hypothesis: payment-service v1.4.2 deadlock is the true upstream root cause.`,
+        remediateRetryMsg: "Step 3 (Attempt #2): Rolling back 'payment-service' to v1.4.1 & flushing deadlocked workers.",
+        remediateRetryDetail: `ACTION #2: rollback payment-service -> v1.4.1 && flush_deadlocks()`,
+        verifyMsg: "Step 4 (Verify #2 PASSED): Re-scanning logs across 'payment-service' & 'order-service'... Error rate returned to 0.0%!",
+        verifyDetail: `HEALTH_CHECK: payment-service=200 OK | order-service=200 OK | backtrack_resolved=true`,
+        actionShort: "Backtrack → Rollback payment-service v1.4.1"
+      }
+    };
+
+    const state = {
+      services: Object.fromEntries(Object.keys(services).map(id => [id, "healthy"])),
+      currentScenario: null,
+      activeStep: "idle",
+      filter: "all",
+      tracesCount: 142,
+      healsCount: 0,
+      backtracksCount: 0,
+      timers: [],
+      stepQueue: [],
+      isRunning: false
+    };
+
+    const $ = id => document.getElementById(id);
+
+    // Cross-tab sync with Partner's Frontend 1 & Frontend 3
+    let meshChannel = null;
+    try {
+      if ("BroadcastChannel" in window) {
+        meshChannel = new BroadcastChannel("sre-mesh-channel");
+        meshChannel.onmessage = ev => {
+          if (!ev.data || ev.data.source === "frontend2") return;
+          if (ev.data.type === "INJECT_FAILURE" && ev.data.serviceId) {
+            triggerServiceChaos(ev.data.serviceId, true);
+          } else if (ev.data.type === "RESET_MESH") {
+            resetSimulation(true);
+          }
+        };
+      }
+    } catch (e) { /* sandbox safe */ }
+
+    function broadcastEvent(type, payload = {}) {
+      const msg = { source: "frontend2", type, timestamp: Date.now(), ...payload };
+      try {
+        if (meshChannel) meshChannel.postMessage(msg);
+      } catch (e) { /* ignore */ }
+      try {
+        localStorage.setItem("sre_mesh_sync_event", JSON.stringify(msg));
+      } catch (e) { /* ignore */ }
+    }
+
+    function clearTimers() {
+      state.timers.forEach(t => clearTimeout(t));
+      state.timers = [];
+    }
+
+    function nowTime() {
+      return new Date().toLocaleTimeString([], { hour12: false });
+    }
+
+    function appendThought({ stage, tagLabel, text, detail = "" }) {
+      const stream = $("thoughtStream");
+      const card = document.createElement("div");
+      card.className = `thought-card ${stage}`;
+      card.dataset.stage = stage;
+
+      if (state.filter !== "all" && state.filter !== stage) {
+        card.style.display = "none";
+      }
+
+      const showDetail = detail && $("toggleVerbose").checked;
+      card.innerHTML = `
+        <div class="thought-meta">
+          <span class="thought-tag tag-${stage}">${tagLabel}</span>
+          <span>${nowTime()}</span>
+        </div>
+        <div class="thought-body">${text}</div>
+        ${ detail ? `<div class="thought-detail" style="display:${showDetail ? "block" : "none"}">${detail}</div>` : "" }
+      `;
+      stream.appendChild(card);
+
+      while (stream.children.length > 60) {
+        stream.firstElementChild.remove();
+      }
+      if ($("autoScrollToggle").checked) {
+        stream.scrollTop = stream.scrollHeight;
+      }
+    }
+
+    function updateStepperUI(activeStep, completedSteps = [], backtrackStep = null) {
+      document.querySelectorAll(".step-node").forEach(node => {
+        const s = node.dataset.step;
+        node.classList.remove("active", "done", "backtrack");
+        if (s === backtrackStep) {
+          node.classList.add("backtrack");
+        } else if (s === activeStep) {
+          node.classList.add("active");
+        } else if (completedSteps.includes(s)) {
+          node.classList.add("done");
+        }
+      });
+    }
+
+    function renderServices() {
+      const list = $("serviceStatusList");
+      list.replaceChildren();
+      Object.keys(services).forEach(id => {
+        const svc = services[id];
+        const st = state.services[id];
+        const row = document.createElement("div");
+        row.className = "service-row";
+        row.title = `Click to inject chaos on ${svc.name}`;
+        row.innerHTML = `
+          <div class="service-icon">${svc.icon}</div>
+          <div>
+            <div class="service-name">${svc.name}</div>
+            <div class="service-desc">${svc.desc} · <code>${svc.slug}</code></div>
+          </div>
+          <span class="pill ${st}">${st.toUpperCase()}</span>
+        `;
+        row.addEventListener("click", () => triggerServiceChaos(id));
+        list.appendChild(row);
+      });
+    }
+
+    function updateStatsUI() {
+      $("statTraces").textContent = state.tracesCount;
+      $("statHeals").textContent = state.healsCount;
+      $("statHealsHint").textContent = `${state.backtracksCount} backtrack${state.backtracksCount === 1 ? "" : "s"} · 100% verified`;
+    }
+
+    function setLiveStatus(mode, text) {
+      const dot = $("liveDot");
+      dot.className = "dot" + (mode === "busy" ? " busy" : mode === "alert" ? " alert" : "");
+      $("liveBadgeText").textContent = text;
+    }
+
+    function startScenario(scenarioKey, fromRemote = false) {
+      clearTimers();
+      state.isRunning = false;
+      state.stepQueue = [];
+
+      const sc = chaosScenarios[scenarioKey];
+      state.currentScenario = sc;
+
+      // Reset service states then mark root + symptom
+      Object.keys(state.services).forEach(k => state.services[k] = "healthy");
+      state.services[sc.rootService] = "failing";
+      if (sc.symptomService && sc.symptomService !== sc.rootService) {
+        state.services[sc.symptomService] = "failing";
+      }
+      renderServices();
+
+      // Update top stats & hypothesis card
+      $("statNode").textContent = "ALERT";
+      $("statNodeHint").textContent = `Anomaly in ${services[sc.rootService].slug}`;
+      $("statConfidence").textContent = "—";
+      $("activeScenarioLabel").textContent = `Active: ${sc.label}`;
+      setLiveStatus("alert", "ANOMALY DETECTED");
+
+      $("hypTitle").textContent = sc.label;
+      $("hypStage").textContent = "INCIDENT DETECTED";
+      $("hypBadge").className = "pill failing";
+      $("hypBadge").textContent = "FAILING";
+      $("hypSummary").textContent = sc.alertMsg;
+      $("hypConfValue").textContent = "0%";
+      $("hypConfBar").style.width = "0%";
+      $("kvTraceId").textContent = sc.traceId;
+      $("kvPath").textContent = sc.path;
+      $("kvCulprit").textContent = "Scanning...";
+      $("kvAction").textContent = "Pending diagnosis";
+      $("terminalStatusText").textContent = `Alert received on ${services[sc.rootService].slug} — preparing LangGraph state...`;
+
+      updateStepperUI(null, []);
+
+      appendThought({
+        stage: "alert",
+        tagLabel: "ALERT · ANOMALY",
+        text: sc.alertMsg,
+        detail: `{"event":"ERROR_SPIKE","target":"${services[sc.rootService].slug}","trace_id":"${sc.traceId}"}`
+      });
+
+      if (!fromRemote) {
+        broadcastEvent("INJECT_FAILURE", { serviceId: sc.rootService, scenario: scenarioKey });
+      }
+
+      buildStepQueue(sc);
+
+      if ($("toggleAutoHeal").checked) {
+        scheduleNextStep();
+      } else {
+        $("terminalStatusText").textContent = "Auto-Heal paused. Click 'Trigger Agent Diagnosis Now' or 'Step node' to run LangGraph.";
+      }
+    }
+
+    function buildStepQueue(sc) {
+      const dryRun = $("toggleDryRun").checked;
+      const steps = [];
+
+      // Step 1: Analyze
+      steps.push(() => {
+        state.tracesCount += 14;
+        updateStatsUI();
+        $("statNode").textContent = "ANALYZE";
+        $("statNodeHint").textContent = `Correlating ${sc.traceId}`;
+        $("hypStage").textContent = "NODE 1 · ANALYZE";
+        $("terminalStatusText").textContent = "Step 1: Ingesting logs & correlating distributed trace spans...";
+        setLiveStatus("busy", "AGENT ANALYZING");
+        updateStepperUI("analyze", []);
+
+        appendThought({
+          stage: "analyze",
+          tagLabel: "AGENT · ANALYZE",
+          text: sc.analyzeMsg,
+          detail: sc.analyzeDetail
+        });
+      });
+
+      // Step 2: Hypothesize
+      steps.push(() => {
+        $("statNode").textContent = "HYPOTHESIZE";
+        $("statNodeHint").textContent = "Isolating culprit node";
+        $("statConfidence").textContent = `${sc.confidence}%`;
+        $("hypStage").textContent = "NODE 2 · HYPOTHESIZE";
+        $("hypConfValue").textContent = `${sc.confidence}%`;
+        $("hypConfBar").style.width = `${sc.confidence}%`;
+        $("kvCulprit").textContent = services[sc.backtrack ? sc.symptomService : sc.rootService].slug;
+        $("kvAction").textContent = sc.backtrack ? "Restart order-service (Attempt #1)" : sc.actionShort;
+        $("hypSummary").textContent = sc.hypothesizeMsg;
+        $("terminalStatusText").textContent = "Step 2: LLM evaluating trace propagation graph & confidence score...";
+        updateStepperUI("hypothesize", ["analyze"]);
+
+        appendThought({
+          stage: "hypothesize",
+          tagLabel: `AGENT · HYPOTHESIZE (${sc.confidence}%)`,
+          text: sc.hypothesizeMsg,
+          detail: sc.hypothesizeDetail
+        });
+      });
+
+      if (dryRun) {
+        steps.push(() => {
+          $("statNode").textContent = "DRY-RUN DONE";
+          $("statNodeHint").textContent = "Remediation skipped (--dry-run)";
+          $("hypStage").textContent = "DRY-RUN COMPLETE";
+          $("terminalStatusText").textContent = "Dry-run mode active (--dry-run): Remediation skipped after hypothesis.";
+          setLiveStatus("alert", "DRY-RUN PAUSED");
+          updateStepperUI(null, ["analyze", "hypothesize"]);
+
+          appendThought({
+            stage: "remediate",
+            tagLabel: "AGENT · DRY-RUN",
+            text: `Dry-run enabled (--dry-run): Would execute [${sc.actionShort}] on '${services[sc.rootService].slug}'. Skipping mutation.`,
+            detail: `{"dry_run":true,"proposed_action":"${sc.actionShort}"}`
+          });
+          state.isRunning = false;
+        });
+        state.stepQueue = steps;
+        return;
+      }
+
+      // If Backtrack Scenario: Attempt 1 fails verification, then backtracks!
+      if (sc.backtrack) {
+        steps.push(() => {
+          state.services[sc.symptomService] = "fixing";
+          renderServices();
+          $("statNode").textContent = "REMEDIATE #1";
+          $("hypStage").textContent = "NODE 3 · REMEDIATE (#1)";
+          $("hypBadge").className = "pill fixing";
+          $("hypBadge").textContent = "FIXING";
+          $("terminalStatusText").textContent = "Step 3: Executing Attempt #1 on suspected service...";
+          updateStepperUI("remediate", ["analyze", "hypothesize"]);
+
+          appendThought({
+            stage: "remediate",
+            tagLabel: "AGENT · REMEDIATE (#1)",
+            text: sc.remediateMsg,
+            detail: sc.remediateDetail
+          });
+        });
+
+        steps.push(() => {
+          state.backtracksCount += 1;
+          state.services[sc.symptomService] = "failing";
+          renderServices();
+          updateStatsUI();
+          $("statNode").textContent = "BACKTRACK";
+          $("statNodeHint").textContent = "Verify failed → re-hypothesizing";
+          $("hypStage").textContent = "NODE 4 · VERIFY FAILED ↺";
+          $("hypBadge").className = "pill failing";
+          $("hypBadge").textContent = "RETRYING";
+          $("terminalStatusText").textContent = "Step 4: Verification detected lingering errors! Backtracking to Hypothesize node...";
+          updateStepperUI("verify", ["analyze", "hypothesize", "remediate"], "verify");
+
+          appendThought({
+            stage: "alert",
+            tagLabel: "VERIFY FAILED · BACKTRACK",
+            text: sc.verifyFailMsg,
+            detail: sc.verifyFailDetail
+          });
+        });
+
+        steps.push(() => {
+          state.tracesCount += 9;
+          updateStatsUI();
+          $("statNode").textContent = "HYPOTHESIZE #2";
+          $("statConfidence").textContent = `${sc.confidenceRetry}%`;
+          $("hypStage").textContent = "NODE 2 · RE-HYPOTHESIZE";
+          $("hypConfValue").textContent = `${sc.confidenceRetry}%`;
+          $("hypConfBar").style.width = `${sc.confidenceRetry}%`;
+          $("kvCulprit").textContent = services[sc.rootService].slug;
+          $("kvAction").textContent = sc.actionShort;
+          $("hypSummary").textContent = sc.hypothesizeRetryMsg;
+          $("terminalStatusText").textContent = "Step 2 (Retry): Isolating deeper upstream database deadlock...";
+          updateStepperUI("hypothesize", ["analyze"]);
+
+          appendThought({
+            stage: "hypothesize",
+            tagLabel: `AGENT · HYPOTHESIZE #2 (${sc.confidenceRetry}%)`,
+            text: sc.hypothesizeRetryMsg,
+            detail: sc.hypothesizeRetryDetail
+          });
+        });
+
+        steps.push(() => {
+          state.services[sc.rootService] = "fixing";
+          state.services[sc.symptomService] = "fixing";
+          renderServices();
+          $("statNode").textContent = "REMEDIATE #2";
+          $("hypStage").textContent = "NODE 3 · REMEDIATE (#2)";
+          $("hypBadge").className = "pill fixing";
+          $("hypBadge").textContent = "FIXING";
+          $("terminalStatusText").textContent = "Step 3 (Retry): Executing controlled rollback on payment-service...";
+          updateStepperUI("remediate", ["analyze", "hypothesize"]);
+
+          appendThought({
+            stage: "remediate",
+            tagLabel: "AGENT · REMEDIATE (#2)",
+            text: sc.remediateRetryMsg,
+            detail: sc.remediateRetryDetail
+          });
+        });
+      } else {
+        // Normal Step 3: Remediate
+        steps.push(() => {
+          state.services[sc.rootService] = "fixing";
+          if (sc.symptomService) state.services[sc.symptomService] = "fixing";
+          renderServices();
+          $("statNode").textContent = "REMEDIATE";
+          $("statNodeHint").textContent = sc.actionShort;
+          $("hypStage").textContent = "NODE 3 · REMEDIATE";
+          $("hypBadge").className = "pill fixing";
+          $("hypBadge").textContent = "FIXING";
+          $("terminalStatusText").textContent = "Step 3: Triggering controlled rollback / service restart...";
+          updateStepperUI("remediate", ["analyze", "hypothesize"]);
+
+          appendThought({
+            stage: "remediate",
+            tagLabel: "AGENT · REMEDIATE",
+            text: sc.remediateMsg,
+            detail: sc.remediateDetail
+          });
+        });
+      }
+
+      // Step 4: Verify & Close Incident
+      steps.push(() => {
+        Object.keys(state.services).forEach(k => state.services[k] = "healthy");
+        renderServices();
+        state.healsCount += 1;
+        state.tracesCount += 6;
+        updateStatsUI();
+
+        $("statNode").textContent = "VERIFIED";
+        $("statNodeHint").textContent = "Error rate returned to 0%";
+        $("hypStage").textContent = "NODE 4 · VERIFIED HEALTHY";
+        $("hypBadge").className = "pill healthy";
+        $("hypBadge").textContent = "RESOLVED";
+        $("hypSummary").textContent = sc.verifyMsg;
+        $("terminalStatusText").textContent = "Step 4: Post-remediation log check passed (0% errors). Incident closed.";
+        setLiveStatus("healthy", "REMEDIATION VERIFIED");
+        updateStepperUI(null, ["analyze", "hypothesize", "remediate", "verify"]);
+
+        appendThought({
+          stage: "verify",
+          tagLabel: "AGENT · VERIFY",
+          text: sc.verifyMsg,
+          detail: sc.verifyDetail
+        });
+
+        appendThought({
+          stage: "success",
+          tagLabel: "SUCCESS · CLOSED LOOP",
+          text: `Remediation validated on '${services[sc.rootService].slug}'. Post-fix error rate = 0.0%. Incident closed automatically.`
+        });
+
+        broadcastEvent("REMEDIATION_VERIFIED", { serviceId: sc.rootService });
+        state.isRunning = false;
+      });
+
+      state.stepQueue = steps;
+    }
+
+    function scheduleNextStep() {
+      if (state.stepQueue.length === 0) {
+        state.isRunning = false;
+        return;
+      }
+      state.isRunning = true;
+      const delay = Number($("speedSelect").value) || 1100;
+      const timer = setTimeout(() => {
+        const nextFn = state.stepQueue.shift();
+        if (nextFn) nextFn();
+        if (state.stepQueue.length > 0 && $("toggleAutoHeal").checked) {
+          scheduleNextStep();
+        } else {
+          state.isRunning = false;
+        }
+      }, delay);
+      state.timers.push(timer);
+    }
+
+    function stepOnce() {
+      clearTimers();
+      state.isRunning = false;
+      if (state.stepQueue.length === 0) {
+        if (!state.currentScenario) {
+          startScenario("dbLock");
+          clearTimers();
+        } else {
+          appendThought({
+            stage: "analyze",
+            tagLabel: "SYSTEM · INFO",
+            text: "All steps for the current incident have completed. Inject a new failure to step through diagnosis."
+          });
+          return;
+        }
+      }
+      const nextFn = state.stepQueue.shift();
+      if (nextFn) nextFn();
+    }
+
+    function triggerServiceChaos(serviceId, fromRemote = false) {
+      const map = {
+        payments: "dbLock",
+        orders: "latencySpike",
+        inventory: "memoryLeak",
+        auth: "authDrift",
+        gateway: "latencySpike"
+      };
+      startScenario(map[serviceId] || "dbLock", fromRemote);
+    }
+
+    function resetSimulation(fromRemote = false) {
+      clearTimers();
+      state.stepQueue = [];
+      state.isRunning = false;
+      state.currentScenario = null;
+      Object.keys(state.services).forEach(k => state.services[k] = "healthy");
+      renderServices();
+
+      $("statNode").textContent = "IDLE";
+      $("statNodeHint").textContent = "Monitoring log stream";
+      $("statConfidence").textContent = "—";
+      $("activeScenarioLabel").textContent = "Ready for injection";
+      setLiveStatus("healthy", "LANGGRAPH AGENT READY");
+
+      $("hypTitle").textContent = "No Active Incident";
+      $("hypStage").textContent = "MONITORING MESH";
+      $("hypBadge").className = "pill healthy";
+      $("hypBadge").textContent = "HEALTHY";
+      $("hypSummary").textContent = "All 5 microservices are responding normally. Use the Chaos Triggers to test autonomous root-cause diagnosis.";
+      $("hypConfValue").textContent = "0%";
+      $("hypConfBar").style.width = "0%";
+      $("kvTraceId").textContent = "—";
+      $("kvPath").textContent = "gateway → mesh";
+      $("kvCulprit").textContent = "None";
+      $("kvAction").textContent = "Standby";
+      $("terminalStatusText").textContent = "Mesh reset: Listening on structured JSON log stream (5 microservices)...";
+
+      updateStepperUI(null, []);
+
+      appendThought({
+        stage: "verify",
+        tagLabel: "MESH · RESET",
+        text: "Simulation reset: All 5 services restored to HEALTHY. LangGraph state machine returned to monitoring."
+      });
+
+      if (!fromRemote) {
+        broadcastEvent("RESET_MESH");
+      }
+    }
+
+    // Event Listeners
+    $("btnDbLock").addEventListener("click", () => startScenario("dbLock"));
+    $("btnLatencySpike").addEventListener("click", () => startScenario("latencySpike"));
+    $("btnMemoryLeak").addEventListener("click", () => startScenario("memoryLeak"));
+    $("btnAuthDrift").addEventListener("click", () => startScenario("authDrift"));
+    $("btnBacktrackDemo").addEventListener("click", () => startScenario("backtrackDemo"));
+
+    $("runAgentBtn").addEventListener("click", () => {
+      if (state.stepQueue.length > 0) {
+        clearTimers();
+        scheduleNextStep();
+      } else {
+        startScenario("dbLock");
+      }
+    });
+
+    $("stepOnceBtn").addEventListener("click", stepOnce);
+    $("resetMeshBtn").addEventListener("click", () => resetSimulation(false));
+
+    $("clearStreamBtn").addEventListener("click", () => {
+      $("thoughtStream").replaceChildren();
+      appendThought({
+        stage: "analyze",
+        tagLabel: "STREAM · CLEARED",
+        text: "Thought stream cleared. Agent continues monitoring distributed trace headers."
+      });
+    });
+
+    $("copyLogsBtn").addEventListener("click", () => {
+      const lines = Array.from(document.querySelectorAll("#thoughtStream .thought-card")).map(card => {
+        const meta = card.querySelector(".thought-meta")?.innerText.replace(/\s+/g, " ").trim() || "";
+        const body = card.querySelector(".thought-body")?.innerText.trim() || "";
+        return `[${meta}] ${body}`;
+      }).join("\n");
+      const textToCopy = lines || "No agent trace logs yet.";
+      const fallbackCopy = () => {
+        const ta = document.createElement("textarea");
+        ta.value = textToCopy;
+        document.body.appendChild(ta);
+        ta.select();
+        try { document.execCommand("copy"); } catch (e) {}
+        ta.remove();
+      };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(textToCopy).catch(fallbackCopy);
+      } else {
+        fallbackCopy();
+      }
+      const btn = $("copyLogsBtn");
+      const orig = btn.textContent;
+      btn.textContent = "✓ Copied!";
+      setTimeout(() => { btn.textContent = orig; }, 1200);
+    });
+
+    // Filter chips
+    document.querySelectorAll("#filterBar .filter-chip").forEach(chip => {
+      chip.addEventListener("click", () => {
+        document.querySelectorAll("#filterBar .filter-chip").forEach(c => c.classList.remove("active"));
+        chip.classList.add("active");
+        state.filter = chip.dataset.filter;
+        document.querySelectorAll("#thoughtStream .thought-card").forEach(card => {
+          card.style.display = (state.filter === "all" || card.dataset.stage === state.filter) ? "block" : "none";
+        });
+      });
+    });
+
+    // Toggle verbose details dynamically
+    $("toggleVerbose").addEventListener("change", () => {
+      const show = $("toggleVerbose").checked;
+      document.querySelectorAll("#thoughtStream .thought-detail").forEach(el => {
+        el.style.display = show ? "block" : "none";
+      });
+    });
+
+    // Initialize UI
+    renderServices();
+    updateStatsUI();
+    appendThought({
+      stage: "analyze",
+      tagLabel: "SYSTEM · INIT",
+      text: "LangGraph SRE Agent initialized (nodes: Analyze -> Hypothesize -> Remediate -> Verify). Connected to 5 simulated microservices.",
+      detail: `{"services":["api-gateway","auth-service","order-service","payment-service","inventory-service"],"mode":"closed-loop"}`
+    });
+  </script>
+</body>
+</html>
